@@ -18,10 +18,7 @@ fn flood_breadth_first(img: image::GrayImage, x: i64, y: i64, replacement_color:
     let mut queue = LinkedList::new();
     let (w, h) = img.dimensions();
     let mut flooded = img.clone();
-    queue.push_back((x + 1, y));
-    queue.push_back((x - 1, y));
-    queue.push_back((x, y + 1));
-    queue.push_back((x, y - 1));
+    queue.push_back((x, y));
     while !queue.is_empty() {
         let (x, y) = queue.pop_front().unwrap();
         if (x as u32) < w && (y as u32) < h && x >= 0 && y >= 0 {
