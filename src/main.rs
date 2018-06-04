@@ -5,8 +5,10 @@ use std::collections::LinkedList;
 
 fn main() {
     
-    let img = image::open("data/image.jpg").unwrap().to_luma();
-    let threshed = imageproc::contrast::adaptive_threshold(&img, 7);
+    let img = image::open("data/kela_form.png").unwrap().to_luma();
+    let img = imageproc::filter::gaussian_blur_f32(&img, 1.0);
+    img.save("blurred.png").unwrap();
+    let threshed = imageproc::contrast::adaptive_threshold(&img, 14);
     threshed.save("threshed.png").unwrap();
     let threshed = flood_breadth_first(threshed, 121, 121, &image::Luma([0]));
     
