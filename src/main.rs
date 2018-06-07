@@ -25,6 +25,62 @@ fn main() {
 
 }
 
+fn polygon_ramer_douglas_peucker(path: Vec<(i64, i64)>, tolerance: i64) -> Vec<(i64, i64)> {
+    let mut widest = 0;
+    let mut start_index = 0;
+    for i in 0..path.len() {
+        let point = path[0];
+        for j in i + 1 .. path.len() {
+            let distance = distance2(point, path[j]);
+            if distance > widest {
+                let start_index = i;
+                let widest = distance;
+            }
+        }
+    }
+    let mut v = Vec::new();
+    v.extend_from_slice(&path[start_index..path.len()]);
+    v.extend_from_slice(&path[0..start_index]);
+    ramer_douglas_peucker(v, tolerance)
+}
+
+fn ramer_douglas_peucker(path: Vec<(i64, i64)>, tolerance: i64) -> Vec<(i64, i64)> {
+
+    let max_distance = 0;
+    let index = 0;
+    let end = path.len() - 1;
+
+    for i in 1..(end - 1) {
+        let d = perpendicular_distance(path[i], (path[0], path[end]));
+        if d > max_distance {
+            let index = i;
+            let max_distance = d;
+        }
+    }
+
+    if max_distance > tolerance {
+        let mut recursive_results1 = ramer_douglas_peucker(path[0..index].to_vec(), tolerance);
+        let mut recursive_results2 = ramer_douglas_peucker(path[index..end].to_vec(), tolerance);
+        recursive_results1.pop().unwrap();
+        recursive_results1.append(&mut recursive_results2);
+        recursive_results1
+    } else {
+        vec![path[0], path[end]]
+    }
+}
+
+fn perpendicular_distance(point: (i64, i64), line: ((i64, i64), (i64, i64))) -> i64 {
+    let (x_0, y_0) = point;
+    let ((x_1, y_1), (x_2, y_2)) = line;
+    ((y_2 - y_1) * x_0 - (x_2 - x_1) * y_0 + x_2 * y_1 - y_2 * x_1)^2 / ((y_2 - y_1)^2 + (x_2 - x_1)^2)
+}
+
+fn distance2(point: (i64, i64), other: (i64, i64)) -> i64 {
+    let (x, y) = point;
+    let (u, v) = other;
+    (u - x)^2 + (v - y)^2
+}
+
 #[derive(Debug)]
 struct FormParsingInfo {
     questions: Vec<Question>,
