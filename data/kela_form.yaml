@@ -1,0 +1,19 @@
+image:
+  size:
+    width: 4133
+    height: 5845
+questions:
+  - wording: Haluan korttiini merkinnan avustajan tarpeesta (= A-merkinta)
+    options:
+      - topleft:
+          x: 396
+          y: 3193
+        bottomright:
+          x: 480
+          y: 3276
+      - topleft:
+          x: 396
+          y: 3360
+        bottomright:
+          x: 480
+          y: 3443
