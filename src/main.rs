@@ -7,10 +7,12 @@ use std::io::Read;
 
 fn main() {
 
+    let filename = "data/one_cell.png";
+
     let i = load_parsing_info(String::from("data/kela_form.yaml"));
     println!("{:?}", i);
     
-    let img = image::open(String::from("data/kela_form.png")).unwrap().to_luma();
+    let img = image::open(String::from(filename)).unwrap().to_luma();
     println!("Blurring image");
     let img = imageproc::filter::gaussian_blur_f32(&img, 0.5);
     img.save("blurred.png").unwrap();
@@ -18,13 +20,82 @@ fn main() {
     let threshed = imageproc::contrast::adaptive_threshold(&img, 14);
     threshed.save("threshed.png").unwrap();
 
+    println!("Detecting edges");
+    let edges = imageproc::edges::canny(&threshed, 0.01, 50.0);
+    edges.save("edges.png").unwrap();
+    let a = find_contour(&edges);
+    let simplified = polygon_ramer_douglas_peucker(a, 5);
+    println!("{:?}", simplified);
+
     println!("Flooding");
-    let flooded = flood_breadth_first(threshed, 100, 100, &image::Luma([121]));
-    
+    let flooded = flood_breadth_first(threshed, 1, 1, &image::Luma([121]));
+
     flooded.save("flooded.png").unwrap();
 
 }
 
+fn find_contour(image: &image::GrayImage) -> Vec<(i64, i64)> {
+    let (w, h) = image.dimensions();
+    let (x, y) = (|w, h| {
+        for i in 0..w {
+            for j in 0..h {
+                if image.get_pixel(i, j) == &image::Luma([255]) {
+                    return (i, j);
+                }
+            }
+        }
+        (0, 0)
+    })(w, h);
+    let (x_out, y_out) = (x - 1, y);
+
+    follow_contour(image, x as i64, y as i64, Direction::Right, vec![])
+}
+
+enum Direction {
+    Right,
+    Down,
+    Left,
+    Up,
+}
+
+fn follow_contour(img: &image::GrayImage, x: i64, y: i64, direction: Direction, mut contour: Vec<(i64, i64)>) -> Vec<(i64, i64)> {
+    if !contour.len() == 0 && contour[0] == (x, y) {
+        contour.push((x, y));
+        return contour
+    }
+    let ((x_n, y_n), (x_on, y_on)) = match direction {
+        Direction::Right => ((x, y + 1), (x - 1, y + 1)),
+        Direction::Down => ((x + 1, y), (x + 1, y + 1)),
+        Direction::Left => ((x, y - 1), (x + 1, y - 1)),
+        Direction::Up => ((x - 1, y), (x - 1, y - 1)),
+    };
+    let next_pixel_right_color = img.get_pixel(x_n as u32, y_n as u32) == &image::Luma([255]);
+    let next_outer_pixel_right_color = img.get_pixel(x_on as u32, y_on as u32) == &image::Luma([0]);
+    if next_pixel_right_color && next_outer_pixel_right_color {
+        contour.push((x, y));
+        follow_contour(img, x, y + 1, Direction::Right, contour.clone())
+    } else {
+        if !next_outer_pixel_right_color {
+            let (next_direction, next_x, next_y) = match direction {
+                Direction::Right => (Direction::Up, x - 1, y + 1),
+                Direction::Down => (Direction::Right, x + 1, y + 1),
+                Direction::Left => (Direction::Down, x + 1, y - 1),
+                Direction::Up => (Direction::Left, x - 1, y - 1),
+            };
+            contour.push((x, y));
+            follow_contour(img, next_x, next_y, next_direction, contour.clone())
+        } else {
+            let next_direction = match direction {
+                Direction::Right => Direction::Down,
+                Direction::Down => Direction::Left,
+                Direction::Left => Direction::Up,
+                Direction::Up => Direction::Right
+            };
+            follow_contour(img, x, y, next_direction, contour.clone())
+        }
+    }
+}
+    
 fn polygon_ramer_douglas_peucker(path: Vec<(i64, i64)>, tolerance: i64) -> Vec<(i64, i64)> {
     let mut widest = 0;
     let mut start_index = 0;
@@ -129,7 +200,6 @@ fn flood_breadth_first(img: image::GrayImage, x: i64, y: i64, replacement_color:
     queue.push_back((x, y));
     while !queue.is_empty() {
         let (x, y) = queue.pop_front().unwrap();
-        println!("{}, {}", x, y);
         if (x as u32) < w && (y as u32) < h && x >= 0 && y >= 0 {
             if flooded.get_pixel(x as u32, y as u32) == &target_color {
                 flooded.put_pixel(x as u32, y as u32, replacement_color.clone());
