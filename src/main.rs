@@ -24,7 +24,8 @@ fn main() {
     let edges = imageproc::edges::canny(&threshed, 0.01, 50.0);
     edges.save("edges.png").unwrap();
     let a = find_contour(&edges);
-    let simplified = polygon_ramer_douglas_peucker(a, 5);
+    println!("{:?}", a);
+    let simplified = polygon_ramer_douglas_peucker(a.iter().map(|&(x, y)| (x as f64, y as f64)).collect(), 10.0);
     println!("{:?}", simplified);
 
     println!("Flooding");
@@ -59,73 +60,92 @@ enum Direction {
 }
 
 fn follow_contour(img: &image::GrayImage, x: i64, y: i64, direction: Direction, mut contour: Vec<(i64, i64)>) -> Vec<(i64, i64)> {
-    if !contour.len() == 0 && contour[0] == (x, y) {
-        contour.push((x, y));
-        return contour
-    }
-    let ((x_n, y_n), (x_on, y_on)) = match direction {
-        Direction::Right => ((x, y + 1), (x - 1, y + 1)),
-        Direction::Down => ((x + 1, y), (x + 1, y + 1)),
-        Direction::Left => ((x, y - 1), (x + 1, y - 1)),
-        Direction::Up => ((x - 1, y), (x - 1, y - 1)),
-    };
-    let next_pixel_right_color = img.get_pixel(x_n as u32, y_n as u32) == &image::Luma([255]);
-    let next_outer_pixel_right_color = img.get_pixel(x_on as u32, y_on as u32) == &image::Luma([0]);
-    if next_pixel_right_color && next_outer_pixel_right_color {
-        contour.push((x, y));
-        follow_contour(img, x, y + 1, Direction::Right, contour.clone())
-    } else {
-        if !next_outer_pixel_right_color {
-            let (next_direction, next_x, next_y) = match direction {
-                Direction::Right => (Direction::Up, x - 1, y + 1),
-                Direction::Down => (Direction::Right, x + 1, y + 1),
-                Direction::Left => (Direction::Down, x + 1, y - 1),
-                Direction::Up => (Direction::Left, x - 1, y - 1),
-            };
+    let mut to_follow = Vec::new();
+    let x_first = x;
+    let y_first = y;
+    to_follow.push((img, x, y, direction, contour.clone()));
+    while to_follow.len() != 0 {
+        let (img, x, y, direction, mut contour) = to_follow.pop().unwrap();
+
+        if (contour.len() != 0) && (contour[0] == (x, y)) {
             contour.push((x, y));
-            follow_contour(img, next_x, next_y, next_direction, contour.clone())
-        } else {
-            let next_direction = match direction {
-                Direction::Right => Direction::Down,
-                Direction::Down => Direction::Left,
-                Direction::Left => Direction::Up,
-                Direction::Up => Direction::Right
+            return contour
+        }
+        let ((x_n, y_n), (x_on, y_on)) = match direction {
+            Direction::Right => ((x, y + 1), (x - 1, y + 1)),
+            Direction::Down => ((x + 1, y), (x + 1, y + 1)),
+            Direction::Left => ((x, y - 1), (x + 1, y - 1)),
+            Direction::Up => ((x - 1, y), (x - 1, y - 1)),
+        };
+        let next_pixel_right_color = img.get_pixel(x_n as u32, y_n as u32) == &image::Luma([255]);
+        let next_outer_pixel_right_color = img.get_pixel(x_on as u32, y_on as u32) == &image::Luma([0]);
+        if next_pixel_right_color && next_outer_pixel_right_color {
+            contour.push((x, y));
+            let (next_x, next_y) = match direction {
+                Direction::Right => (x, y + 1),
+                Direction::Down => (x + 1, y),
+                Direction::Left => (x, y - 1),
+                Direction::Up => (x - 1, y),
             };
-            follow_contour(img, x, y, next_direction, contour.clone())
+
+            to_follow.push((img, next_x, next_y, direction, contour.clone()));
+
+        } else {
+            if !next_outer_pixel_right_color {
+                let (next_direction, next_x, next_y) = match direction {
+                    Direction::Right => (Direction::Up, x - 1, y + 1),
+                    Direction::Down => (Direction::Right, x + 1, y + 1),
+                    Direction::Left => (Direction::Down, x + 1, y - 1),
+                    Direction::Up => (Direction::Left, x - 1, y - 1),
+                };
+                contour.push((x, y));
+                
+                to_follow.push((img, next_x, next_y, next_direction, contour.clone()));
+            } else {
+                let next_direction = match direction {
+                    Direction::Right => Direction::Down,
+                    Direction::Down => Direction::Left,
+                    Direction::Left => Direction::Up,
+                    Direction::Up => Direction::Right
+                };
+                to_follow.push((img, x, y, next_direction, contour.clone()));
+            }
         }
     }
+    contour
 }
     
-fn polygon_ramer_douglas_peucker(path: Vec<(i64, i64)>, tolerance: i64) -> Vec<(i64, i64)> {
-    let mut widest = 0;
+fn polygon_ramer_douglas_peucker(path: Vec<(f64, f64)>, tolerance: f64) -> Vec<(f64, f64)> {
+    let mut widest = 0.0;
     let mut start_index = 0;
     for i in 0..path.len() {
         let point = path[0];
         for j in i + 1 .. path.len() {
             let distance = distance2(point, path[j]);
             if distance > widest {
-                let start_index = i;
-                let widest = distance;
+                start_index = i;
+                widest = distance;
             }
         }
     }
     let mut v = Vec::new();
     v.extend_from_slice(&path[start_index..path.len()]);
-    v.extend_from_slice(&path[0..start_index]);
+    v.extend_from_slice(&path[0..(start_index + 1)]);
+    println!("{:?}", v);
     ramer_douglas_peucker(v, tolerance)
 }
 
-fn ramer_douglas_peucker(path: Vec<(i64, i64)>, tolerance: i64) -> Vec<(i64, i64)> {
+fn ramer_douglas_peucker(path: Vec<(f64, f64)>, tolerance: f64) -> Vec<(f64, f64)> {
 
-    let max_distance = 0;
-    let index = 0;
+    let mut max_distance = 0.0;
+    let mut index = 0;
     let end = path.len() - 1;
 
     for i in 1..(end - 1) {
         let d = perpendicular_distance(path[i], (path[0], path[end]));
         if d > max_distance {
-            let index = i;
-            let max_distance = d;
+            index = i;
+            max_distance = d;
         }
     }
 
@@ -140,16 +160,20 @@ fn ramer_douglas_peucker(path: Vec<(i64, i64)>, tolerance: i64) -> Vec<(i64, i64
     }
 }
 
-fn perpendicular_distance(point: (i64, i64), line: ((i64, i64), (i64, i64))) -> i64 {
+fn perpendicular_distance(point: (f64, f64), line: ((f64, f64), (f64, f64))) -> f64 {
     let (x_0, y_0) = point;
     let ((x_1, y_1), (x_2, y_2)) = line;
-    ((y_2 - y_1) * x_0 - (x_2 - x_1) * y_0 + x_2 * y_1 - y_2 * x_1)^2 / ((y_2 - y_1)^2 + (x_2 - x_1)^2)
+    if y_2 - y_1 == 0.0 && x_2 - x_1 == 0.0 {
+        distance2(point, (x_1, y_1))
+    } else {
+        ((y_2 - y_1) * x_0 - (x_2 - x_1) * y_0 + x_2 * y_1 - y_2 * x_1).powi(2) / ((y_2 - y_1).powi(2) + (x_2 - x_1).powi(2))
+    }
 }
 
-fn distance2(point: (i64, i64), other: (i64, i64)) -> i64 {
+fn distance2(point: (f64, f64), other: (f64, f64)) -> f64 {
     let (x, y) = point;
     let (u, v) = other;
-    (u - x)^2 + (v - y)^2
+    (u - x).powi(2) + (v - y).powi(2)
 }
 
 #[derive(Debug)]
