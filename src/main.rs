@@ -4,6 +4,8 @@ extern crate yaml_rust;
 
 use std::collections::LinkedList;
 use std::io::Read;
+use std::iter::FromIterator;
+
 
 fn main() {
 
@@ -25,14 +27,48 @@ fn main() {
     edges.save("edges.png").unwrap();
     let a = find_contour(&edges);
     println!("{:?}", a);
-    let simplified = polygon_ramer_douglas_peucker(a.iter().map(|&(x, y)| (x as f64, y as f64)).collect(), 10.0);
+    let simplified = polygon_ramer_douglas_peucker(a.iter().map(|&(x, y)| (x as f64, y as f64)).collect(), 20.0);
     println!("{:?}", simplified);
+
+    let mut vec = Vec::new();
+    let points = simplified.iter().map(|&(x, y)| (x.round() as f32, y.round() as f32));
+    for point in points {
+        vec.push(point);
+    }
+
+    let mut colored = colorize(threshed.clone());
+    draw_hollow_polygon(&mut colored, &vec, image::Rgba([255, 255, 255, 0]));
+    colored.save("polygon.png").unwrap();
 
     println!("Flooding");
     let flooded = flood_breadth_first(threshed, 1, 1, &image::Luma([121]));
 
     flooded.save("flooded.png").unwrap();
 
+}
+fn draw_hollow_polygon<I>(image: &mut I, points: &Vec<(f32, f32)>, color: I::Pixel) -> ()
+    where
+        I: image::GenericImage,
+        I::Pixel: 'static,
+{
+    let mut segments = Vec::new();
+    for i in 0..(points.len() - 1) {
+        segments.push((points[i], points[i+1]));
+    }
+    segments.push((points[points.len() - 1], points[0]));
+    for (point1, point2) in segments {
+        imageproc::drawing::draw_line_segment_mut(image, point1, point2, color); 
+    }
+}
+
+
+fn colorize(image: image::GrayImage) -> image::RgbaImage {
+    let palette_start = std::iter::repeat((0, 0, 0)).take(100);
+    let palette_end = std::iter::repeat((255, 255, 255)).take(156);
+    let mut palette = Vec::from_iter(palette_start);
+    palette.append(&mut Vec::from_iter(palette_end));
+
+    image.expand_palette(palette.as_slice(), Option::None)
 }
 
 fn find_contour(image: &image::GrayImage) -> Vec<(i64, i64)> {
@@ -130,9 +166,11 @@ fn polygon_ramer_douglas_peucker(path: Vec<(f64, f64)>, tolerance: f64) -> Vec<(
     }
     let mut v = Vec::new();
     v.extend_from_slice(&path[start_index..path.len()]);
-    v.extend_from_slice(&path[0..(start_index + 1)]);
+    v.extend_from_slice(&path[0..(start_index)]);
     println!("{:?}", v);
-    ramer_douglas_peucker(v, tolerance)
+    let mut result = ramer_douglas_peucker(v, tolerance);
+    result.pop(); 
+    result
 }
 
 fn ramer_douglas_peucker(path: Vec<(f64, f64)>, tolerance: f64) -> Vec<(f64, f64)> {
@@ -141,7 +179,7 @@ fn ramer_douglas_peucker(path: Vec<(f64, f64)>, tolerance: f64) -> Vec<(f64, f64
     let mut index = 0;
     let end = path.len() - 1;
 
-    for i in 1..(end - 1) {
+    for i in 1..end {
         let d = perpendicular_distance(path[i], (path[0], path[end]));
         if d > max_distance {
             index = i;
@@ -151,7 +189,7 @@ fn ramer_douglas_peucker(path: Vec<(f64, f64)>, tolerance: f64) -> Vec<(f64, f64
 
     if max_distance > tolerance {
         let mut recursive_results1 = ramer_douglas_peucker(path[0..index].to_vec(), tolerance);
-        let mut recursive_results2 = ramer_douglas_peucker(path[index..end].to_vec(), tolerance);
+        let mut recursive_results2 = ramer_douglas_peucker(path[index..path.len()].to_vec(), tolerance);
         recursive_results1.pop().unwrap();
         recursive_results1.append(&mut recursive_results2);
         recursive_results1
